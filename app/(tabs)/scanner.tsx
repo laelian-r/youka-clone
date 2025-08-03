@@ -1,10 +1,15 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Button, StyleSheet, Text, View } from 'react-native';
+
+const API_URL = "https://world.openfoodfacts.org/api/v2/product/";
 
 export default function TabTwoScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(true);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     requestPermission();
@@ -25,18 +30,51 @@ export default function TabTwoScreen() {
     );
   }
 
-  const handleScan = (scanningResult: BarcodeScanningResult) => {
+  const saveItemsToStorage = async (product: any) => {
+    try {
+      // Check if the product already exists
+      const products = await AsyncStorage.getItem("products");
+      console.log("products", products);
+      const savedProducts = products ? JSON.parse(products) : [];
+      const index = savedProducts.findIndex((p: any) => p.code === product.code);
+
+      if (index === -1) {
+        savedProducts.unshift(product);
+        await AsyncStorage.setItem("products", JSON.stringify([...savedProducts, product]));
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  const handleScan = async (scanningResult: BarcodeScanningResult) => {
     console.log("Scanned", scanningResult);
 
     try {
       // 1 Scanned
       setScanned(true);
 
-      // 2 axio get API
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
 
-      // 3 save asyng storage
+      timeoutRef.current = setTimeout(async () => {
+        // 2 axio get API
+        const response = await axios.get(
+          API_URL + scanningResult.data + ".json?lc=fr"
+        );
+        console.log("response", response.data);
 
-      // 4 navigate to modal
+        if (response.data.status === 1) {
+          // 3 save asyng storage
+          const product = response.data.product;
+          const grade = 6;
+
+          await saveItemsToStorage({...product, grade});
+
+          // 4 navigate to modal
+        }
+      }, 1000);
     } catch (error) {
       console.error(error);
     }
